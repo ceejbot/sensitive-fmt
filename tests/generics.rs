@@ -120,13 +120,13 @@ struct PhantomHolder<T> {
 #[test]
 fn debug_generic_with_plain_field() {
     let h: Holder<u32> = Holder { id: 1, value: 99 };
-    assert_eq!(format!("{:?}", h), "Holder { id: 1, value: 99 }");
+    assert_eq!(format!("{h:?}"), "Holder { id: 1, value: 99 }");
 }
 
 #[test]
 fn display_generic_with_plain_field() {
     let h: Holder<u32> = Holder { id: 1, value: 99 };
-    assert_eq!(format!("{}", h), "Holder { id: 1, value: 99 }");
+    assert_eq!(format!("{h}"), "Holder { id: 1, value: 99 }");
 }
 
 #[test]
@@ -137,8 +137,8 @@ fn redact_only_drops_bounds_on_t() {
         id: 1,
         _value: NotFormattable,
     };
-    assert_eq!(format!("{:?}", r), "RedactOnly { id: 1, _value: REDACTED }");
-    assert_eq!(format!("{}", r), "RedactOnly { id: 1, _value: REDACTED }");
+    assert_eq!(format!("{r:?}"), "RedactOnly { id: 1, _value: REDACTED }");
+    assert_eq!(format!("{r}"), "RedactOnly { id: 1, _value: REDACTED }");
 }
 
 #[test]
@@ -147,20 +147,20 @@ fn lifetime_compiles_and_renders() {
         name: "alice",
         value: 7,
     };
-    assert_eq!(format!("{:?}", w), r#"WithLifetime { name: "alice", value: 7 }"#);
-    assert_eq!(format!("{}", w), "WithLifetime { name: alice, value: 7 }");
+    assert_eq!(format!("{w:?}"), r#"WithLifetime { name: "alice", value: 7 }"#);
+    assert_eq!(format!("{w}"), "WithLifetime { name: alice, value: 7 }");
 }
 
 #[test]
 fn associated_type_debug_field_compiles_and_renders() {
     let value = AssocDebug::<DemoTypes> { value: vec![1, 2, 3] };
-    assert_eq!(format!("{:?}", value), "AssocDebug { value: [1, 2, 3] }");
+    assert_eq!(format!("{value:?}"), "AssocDebug { value: [1, 2, 3] }");
 }
 
 #[test]
 fn associated_type_display_field_compiles_and_renders() {
     let value = AssocDisplay::<DemoTypes> { value: "visible" };
-    assert_eq!(format!("{}", value), "AssocDisplay { value: visible }");
+    assert_eq!(format!("{value}"), "AssocDisplay { value: visible }");
 }
 
 #[test]
@@ -168,8 +168,8 @@ fn associated_type_truncate_field_uses_display() {
     let value = AssocTruncate::<DemoTypes> {
         token: "sk_live_abc123wxyz".into(),
     };
-    assert_eq!(format!("{:?}", value), "AssocTruncate { token: ****wxyz }");
-    assert_eq!(format!("{}", value), "AssocTruncate { token: ****wxyz }");
+    assert_eq!(format!("{value:?}"), "AssocTruncate { token: ****wxyz }");
+    assert_eq!(format!("{value}"), "AssocTruncate { token: ****wxyz }");
 }
 
 #[test]
@@ -179,11 +179,11 @@ fn associated_type_hidden_fields_do_not_need_formatting_bounds() {
         skipped: NotFormattable,
     };
     assert_eq!(
-        format!("{:?}", value),
+        format!("{value:?}"),
         "AssocHidden { redacted: REDACTED, skipped: <skipped> }",
     );
     assert_eq!(
-        format!("{}", value),
+        format!("{value}"),
         "AssocHidden { redacted: REDACTED, skipped: <skipped> }",
     );
 }
@@ -191,8 +191,8 @@ fn associated_type_hidden_fields_do_not_need_formatting_bounds() {
 #[test]
 fn generic_wrapper_with_explicit_where_clause_compiles_and_renders() {
     let value = WrapperWhere { value: Shown(17) };
-    assert_eq!(format!("{:?}", value), "WrapperWhere { value: 17 }");
-    assert_eq!(format!("{}", value), "WrapperWhere { value: 17 }");
+    assert_eq!(format!("{value:?}"), "WrapperWhere { value: 17 }");
+    assert_eq!(format!("{value}"), "WrapperWhere { value: 17 }");
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn phantom_data_field_does_not_overbound_type_param() {
         marker: core::marker::PhantomData,
     };
     assert_eq!(
-        format!("{:?}", h),
+        format!("{h:?}"),
         "PhantomHolder { id: 1, marker: PhantomData<generics::NotFormattable> }"
     );
 }

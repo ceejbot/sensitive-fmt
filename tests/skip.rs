@@ -17,7 +17,7 @@ fn skip_in_debug() {
         id: 1,
         _raw: NotFormattable,
     };
-    assert_eq!(format!("{:?}", r), "Record { id: 1, _raw: <skipped> }");
+    assert_eq!(format!("{r:?}"), "Record { id: 1, _raw: <skipped> }");
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn skip_in_display() {
         id: 1,
         _raw: NotFormattable,
     };
-    assert_eq!(format!("{}", r), "Record { id: 1, _raw: <skipped> }");
+    assert_eq!(format!("{r}"), "Record { id: 1, _raw: <skipped> }");
 }
 
 /// A struct that uses both #[sensitive(redact)] and #[sensitive(skip)] on
@@ -48,6 +48,6 @@ fn redact_and_skip_coexist_in_one_struct() {
         _token: "secret".into(),
         _raw: NotFormattable,
     };
-    assert_eq!(format!("{:?}", m), "Mixed { id: 1, _token: REDACTED, _raw: <skipped> }",);
-    assert_eq!(format!("{}", m), "Mixed { id: 1, _token: REDACTED, _raw: <skipped> }",);
+    assert_eq!(format!("{m:?}"), "Mixed { id: 1, _token: REDACTED, _raw: <skipped> }",);
+    assert_eq!(format!("{m}"), "Mixed { id: 1, _token: REDACTED, _raw: <skipped> }",);
 }
