@@ -1,0 +1,28 @@
+error[E0277]: `NotDisplay` doesn't implement `std::fmt::Display`
+  --> tests/compile_fail/associated_truncate_missing_display_bound.rs:26:29
+   |
+26 |     let _ = format!("{:?}", value);
+   |                      ----   ^^^^^ `NotDisplay` cannot be formatted with the default formatter
+   |                      |
+   |                      required by this formatting parameter
+   |
+help: the trait `std::fmt::Display` is not implemented for `NotDisplay`
+  --> tests/compile_fail/associated_truncate_missing_display_bound.rs:7:1
+   |
+ 7 | struct NotDisplay;
+   | ^^^^^^^^^^^^^^^^^
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+help: the trait `Debug` is implemented for `Wrapper<T>`
+  --> tests/compile_fail/associated_truncate_missing_display_bound.rs:15:10
+   |
+15 | #[derive(SensitiveDebug)]
+   |          ^^^^^^^^^^^^^^
+note: required for `Wrapper<Demo>` to implement `Debug`
+  --> tests/compile_fail/associated_truncate_missing_display_bound.rs:16:8
+   |
+15 | #[derive(SensitiveDebug)]
+   |          -------------- type parameter would need to implement `Debug`
+16 | struct Wrapper<T>
+   |        ^^^^^^^^^^
+   = help: consider manually implementing `Debug` to avoid undesired bounds
+   = note: this error originates in the macro `$crate::__export::format_args` which comes from the expansion of the derive macro `SensitiveDebug` (in Nightly builds, run with -Z macro-backtrace for more info)

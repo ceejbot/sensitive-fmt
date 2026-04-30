@@ -12,6 +12,13 @@ struct User {
 #[derive(SensitiveDebug)]
 struct Empty {}
 
+#[derive(SensitiveDebug)]
+#[allow(dead_code)]
+struct Node {
+    value: u32,
+    next: Option<Box<Node>>,
+}
+
 #[test]
 fn debug_named_struct() {
     let u = User {
@@ -41,4 +48,10 @@ fn debug_pretty_print_works() {
     assert!(pretty.contains("User {"));
     assert!(pretty.contains("_id: 42,"));
     assert!(pretty.contains(r#"_name: "Alice","#));
+}
+
+#[test]
+fn recursive_debug_struct_compiles_and_renders() {
+    let node = Node { value: 1, next: None };
+    assert_eq!(format!("{:?}", node), "Node { value: 1, next: None }");
 }
