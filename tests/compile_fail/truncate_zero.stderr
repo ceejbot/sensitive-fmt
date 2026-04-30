@@ -1,0 +1,5 @@
+error: truncate must be at least 1
+ --> tests/compile_fail/truncate_zero.rs:5:28
+  |
+5 |     #[sensitive(truncate = 0)]
+  |                            ^

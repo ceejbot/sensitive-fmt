@@ -1,0 +1,5 @@
+error: unknown sensitive modifier "foo"; expected one of: redact, truncate = N, skip
+ --> tests/compile_fail/unknown_modifier.rs:5:17
+  |
+5 |     #[sensitive(foo)]
+  |                 ^^^

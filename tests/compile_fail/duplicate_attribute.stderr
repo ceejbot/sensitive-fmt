@@ -1,0 +1,5 @@
+error: field already has a #[sensitive(...)] attribute
+ --> tests/compile_fail/duplicate_attribute.rs:6:5
+  |
+6 |     #[sensitive(skip)]
+  |     ^^^^^^^^^^^^^^^^^^

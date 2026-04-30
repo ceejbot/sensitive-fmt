@@ -1,0 +1,5 @@
+error: at most one sensitive modifier may be applied; found redact and skip
+ --> tests/compile_fail/two_modifiers.rs:5:5
+  |
+5 |     #[sensitive(redact, skip)]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^

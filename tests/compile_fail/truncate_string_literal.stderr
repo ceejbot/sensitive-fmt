@@ -1,0 +1,5 @@
+error: truncate value must be an integer literal
+ --> tests/compile_fail/truncate_string_literal.rs:5:28
+  |
+5 |     #[sensitive(truncate = "4")]
+  |                            ^^^

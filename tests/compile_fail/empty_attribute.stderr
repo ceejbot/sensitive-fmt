@@ -1,0 +1,5 @@
+error: expected one of: redact, truncate = N, skip
+ --> tests/compile_fail/empty_attribute.rs:5:5
+  |
+5 |     #[sensitive()]
+  |     ^^^^^^^^^^^^^^

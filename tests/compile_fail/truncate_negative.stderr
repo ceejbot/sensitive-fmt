@@ -1,0 +1,5 @@
+error: truncate must be a positive integer
+ --> tests/compile_fail/truncate_negative.rs:5:28
+  |
+5 |     #[sensitive(truncate = -3)]
+  |                            ^

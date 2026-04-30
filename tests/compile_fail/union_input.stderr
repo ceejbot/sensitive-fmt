@@ -1,0 +1,5 @@
+error: SensitiveDebug does not support unions
+ --> tests/compile_fail/union_input.rs:4:7
+  |
+4 | union Bad { a: u32, b: f32 }
+  |       ^^^

@@ -1,0 +1,25 @@
+[package]
+name = "sensitive-fmt"
+version = "0.1.0"
+authors = ["C J Silverio <ceejceej@gmail.com>"]
+categories = ["development-tools::procedural-macro-helpers"]
+description = "Derive Debug and Display while honoring #[sensitive(redact | truncate = N | skip)] field attributes."
+edition = "2024"
+exclude = [ "docs/", "tests/no_std_build/target/", "*.rlib", "rust_out", "test_marker_warn", ".github/", ".justfile", ".rustfmt.toml" ]
+homepage = "https://github.com/ceejbot/sensitive-fmt"
+keywords = ["derive", "debug", "display", "redact", "phi"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/ceejbot/sensitive-fmt"
+rust-version = "1.88.0"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+[dev-dependencies]
+trybuild = "1"

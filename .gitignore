@@ -1,0 +1,21 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+*.rlib
+
+# Cargo
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.ignore/
+docs/superpowers/**
+.fastembed_cache/
+.config/
+.claude/settings.local.json

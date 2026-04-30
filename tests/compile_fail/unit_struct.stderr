@@ -1,0 +1,5 @@
+error: SensitiveDebug requires a struct with named fields
+ --> tests/compile_fail/unit_struct.rs:4:8
+  |
+4 | struct Bad;
+  |        ^^^
