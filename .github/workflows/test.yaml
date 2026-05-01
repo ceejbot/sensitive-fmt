@@ -15,7 +15,7 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                rust: [stable, "1.90.0", nightly]
+                rust: ["1.88.0", stable, nightly]
         steps:
             - uses: actions/checkout@v5
 
@@ -48,7 +48,7 @@ jobs:
 
             - name: run the tests
               env:
-                  SKIP_TRYBUILD: ${{ matrix.rust == 'nightly' && '1' || '' }}
+                  SKIP_TRYBUILD: ${{ matrix.rust != 'stable' && '1' || '' }}
               run: cargo nextest run
 
             - name: Run doctests

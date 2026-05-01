@@ -19,7 +19,7 @@ fn display_named_struct_uses_field_display() {
     };
     // Note: Display of `String` does NOT add quotes, so `name: Alice`
     // (contrast with Debug, which would be `name: "Alice"`).
-    assert_eq!(format!("{}", u), "User { id: 42, name: Alice }");
+    assert_eq!(format!("{u}"), "User { id: 42, name: Alice }");
 }
 
 #[test]
@@ -36,5 +36,5 @@ struct OneField {
 #[test]
 fn display_single_field_no_separator() {
     let s = OneField { value: 7 };
-    assert_eq!(format!("{}", s), "OneField { value: 7 }");
+    assert_eq!(format!("{s}"), "OneField { value: 7 }");
 }

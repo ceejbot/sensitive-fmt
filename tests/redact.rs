@@ -30,7 +30,7 @@ fn redact_in_debug() {
         _password: "hunter2".into(),
     };
     assert_eq!(
-        format!("{:?}", a),
+        format!("{a:?}"),
         "Account { id: 1, _email: REDACTED, _password: REDACTED }",
     );
 }
@@ -43,7 +43,7 @@ fn redact_in_display() {
         _password: "hunter2".into(),
     };
     assert_eq!(
-        format!("{}", a),
+        format!("{a}"),
         "Account { id: 1, _email: REDACTED, _password: REDACTED }",
     );
 }
@@ -54,6 +54,6 @@ fn redact_drops_trait_bound() {
         id: 7,
         _raw: NotFormattable,
     };
-    assert_eq!(format!("{:?}", w), "WithUnformattable { id: 7, _raw: REDACTED }");
-    assert_eq!(format!("{}", w), "WithUnformattable { id: 7, _raw: REDACTED }");
+    assert_eq!(format!("{w:?}"), "WithUnformattable { id: 7, _raw: REDACTED }");
+    assert_eq!(format!("{w}"), "WithUnformattable { id: 7, _raw: REDACTED }");
 }

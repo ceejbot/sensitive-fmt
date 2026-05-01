@@ -1,8 +1,8 @@
 //! Code generation for the `SensitiveDebug` and `SensitiveDisplay` derives.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::{DeriveInput, Generics, Type, WhereClause};
 
@@ -16,24 +16,12 @@ enum Derive {
     DisplayDerive,
 }
 
-/// Which trait bound a single field needs on the type-params it references.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Which trait bound a single field type needs.
+#[derive(Clone, Copy)]
 enum NeededBound {
     None,
     Debug,
     Display,
-    Both,
-}
-
-fn merge_bound(a: NeededBound, b: NeededBound) -> NeededBound {
-    use NeededBound::*;
-    match (a, b) {
-        (None, x) | (x, None) => x,
-        (Both, _) | (_, Both) => Both,
-        (Debug, Display) | (Display, Debug) => Both,
-        (Debug, Debug) => Debug,
-        (Display, Display) => Display,
-    }
 }
 
 fn bound_for_field(plan: &FieldPlan, derive: Derive) -> NeededBound {
@@ -50,16 +38,15 @@ fn bound_for_field(plan: &FieldPlan, derive: Derive) -> NeededBound {
     }
 }
 
-/// Walk a `syn::Type` recursively and collect every type-parameter ident
-/// referenced in it. We do not use `syn::visit` (gated behind a separate
-/// Cargo feature) and instead recurse over the `Type` variants we care about.
-fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, found: &mut BTreeSet<String>) {
+fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, self_type: &Ident, found: &mut BTreeSet<String>) {
     match ty {
-        // A bare path like `T` or `Vec<T>`.
         Type::Path(tp) => {
-            // qself is `<X as Trait>::` prefix — skip qualified paths because
-            // they name associated types, not top-level type params.
+            if let Some(qself) = &tp.qself {
+                collect_type_params(&qself.ty, type_params, self_type, found);
+            }
+
             if tp.qself.is_none()
+                && tp.path.segments.len() == 1
                 && let Some(seg) = tp.path.segments.first()
             {
                 let name = seg.ident.to_string();
@@ -67,92 +54,142 @@ fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, found: &mut BT
                     found.insert(name);
                 }
             }
-            // Recurse into generic arguments (e.g. the `T` in `Vec<T>`).
+
             for seg in &tp.path.segments {
-                if let syn::PathArguments::AngleBracketed(ref ab) = seg.arguments {
-                    for arg in &ab.args {
-                        if let syn::GenericArgument::Type(inner) = arg {
-                            collect_type_params(inner, type_params, found);
-                        }
-                    }
+                if seg.ident == *self_type {
+                    continue;
                 }
+                collect_type_params_from_path_arguments(&seg.arguments, type_params, self_type, found);
             }
         }
-        // &T and &mut T.
-        Type::Reference(r) => {
-            collect_type_params(&r.elem, type_params, found);
-        }
-        // [T; N] and [T].
-        Type::Array(a) => collect_type_params(&a.elem, type_params, found),
-        Type::Slice(s) => collect_type_params(&s.elem, type_params, found),
-        // (A, B, C).
+        Type::Reference(r) => collect_type_params(&r.elem, type_params, self_type, found),
+        Type::Array(a) => collect_type_params(&a.elem, type_params, self_type, found),
+        Type::Slice(s) => collect_type_params(&s.elem, type_params, self_type, found),
         Type::Tuple(t) => {
             for elem in &t.elems {
-                collect_type_params(elem, type_params, found);
+                collect_type_params(elem, type_params, self_type, found);
             }
         }
-        // *const T / *mut T.
-        Type::Ptr(p) => collect_type_params(&p.elem, type_params, found),
-        // (T) — parenthesized type, rare but valid.
-        Type::Paren(p) => collect_type_params(&p.elem, type_params, found),
-        // Compiler-injected token-group wrapper, common in proc-macro pipelines.
-        Type::Group(g) => collect_type_params(&g.elem, type_params, found),
-        // fn(T) -> T — function pointer in callback-holding structs.
+        Type::Ptr(p) => collect_type_params(&p.elem, type_params, self_type, found),
+        Type::Paren(p) => collect_type_params(&p.elem, type_params, self_type, found),
+        Type::Group(g) => collect_type_params(&g.elem, type_params, self_type, found),
         Type::BareFn(f) => {
             for arg in &f.inputs {
-                collect_type_params(&arg.ty, type_params, found);
+                collect_type_params(&arg.ty, type_params, self_type, found);
             }
             if let syn::ReturnType::Type(_, ret_ty) = &f.output {
-                collect_type_params(ret_ty, type_params, found);
+                collect_type_params(ret_ty, type_params, self_type, found);
             }
         }
-        // Everything else (Infer, Never, ImplTrait, TraitObject, …) — no
-        // type params to collect.
         _ => {}
     }
 }
 
-fn referenced_type_params(ty: &Type, type_params: &BTreeSet<String>) -> BTreeSet<String> {
+fn collect_type_params_from_path_arguments(
+    arguments: &syn::PathArguments,
+    type_params: &BTreeSet<String>,
+    self_type: &Ident,
+    found: &mut BTreeSet<String>,
+) {
+    if let syn::PathArguments::AngleBracketed(ab) = arguments {
+        for arg in &ab.args {
+            match arg {
+                syn::GenericArgument::Type(inner) => {
+                    collect_type_params(inner, type_params, self_type, found);
+                }
+                syn::GenericArgument::AssocType(assoc) => {
+                    collect_type_params(&assoc.ty, type_params, self_type, found);
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn referenced_type_params(ty: &Type, type_params: &BTreeSet<String>, self_type: &Ident) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
-    collect_type_params(ty, type_params, &mut found);
+    collect_type_params(ty, type_params, self_type, &mut found);
     found
 }
 
-/// Build the `where` clause for an impl, adding the minimum bounds needed.
-fn synthesize_where(generics: &Generics, field_types: &[(&Type, &FieldPlan)], derive: Derive) -> WhereClause {
-    let type_params: BTreeSet<String> = generics.type_params().map(|tp| tp.ident.to_string()).collect();
-
-    // For each type-param, merge the needed bounds across every field that
-    // references it.
-    let mut needed: BTreeMap<String, NeededBound> = BTreeMap::new();
-    for (ty, plan) in field_types {
-        let referenced = referenced_type_params(ty, &type_params);
-        let bound = bound_for_field(plan, derive);
-        for name in referenced {
-            let entry = needed.entry(name).or_insert(NeededBound::None);
-            *entry = merge_bound(*entry, bound);
+fn contains_self_type(ty: &Type, self_type: &Ident) -> bool {
+    match ty {
+        Type::Path(tp) => {
+            tp.qself
+                .as_ref()
+                .is_some_and(|qself| contains_self_type(&qself.ty, self_type))
+                || tp
+                    .path
+                    .segments
+                    .iter()
+                    .any(|seg| seg.ident == *self_type || path_arguments_contain_self(&seg.arguments, self_type))
         }
+        Type::Reference(r) => contains_self_type(&r.elem, self_type),
+        Type::Array(a) => contains_self_type(&a.elem, self_type),
+        Type::Slice(s) => contains_self_type(&s.elem, self_type),
+        Type::Tuple(t) => t.elems.iter().any(|elem| contains_self_type(elem, self_type)),
+        Type::Ptr(p) => contains_self_type(&p.elem, self_type),
+        Type::Paren(p) => contains_self_type(&p.elem, self_type),
+        Type::Group(g) => contains_self_type(&g.elem, self_type),
+        Type::BareFn(f) => {
+            f.inputs.iter().any(|arg| contains_self_type(&arg.ty, self_type))
+                || matches!(&f.output, syn::ReturnType::Type(_, ret_ty) if contains_self_type(ret_ty, self_type))
+        }
+        _ => false,
     }
+}
 
-    // Build (or extend) the where clause.
+fn path_arguments_contain_self(arguments: &syn::PathArguments, self_type: &Ident) -> bool {
+    if let syn::PathArguments::AngleBracketed(ab) = arguments {
+        ab.args.iter().any(|arg| match arg {
+            syn::GenericArgument::Type(inner) => contains_self_type(inner, self_type),
+            syn::GenericArgument::AssocType(assoc) => contains_self_type(&assoc.ty, self_type),
+            _ => false,
+        })
+    } else {
+        false
+    }
+}
+
+/// Build the `where` clause for an impl, adding the minimum bounds needed.
+fn synthesize_where(
+    generics: &Generics,
+    self_type: &Ident,
+    field_types: &[(&Type, &FieldPlan)],
+    derive: Derive,
+) -> WhereClause {
+    let type_params: BTreeSet<String> = generics.type_params().map(|tp| tp.ident.to_string()).collect();
     let mut wc = generics.where_clause.clone().unwrap_or_else(|| WhereClause {
         where_token: syn::token::Where::default(),
         predicates: syn::punctuated::Punctuated::new(),
     });
 
-    for (name, bound) in needed {
+    for (ty, plan) in field_types {
+        let bound = bound_for_field(plan, derive);
         if matches!(bound, NeededBound::None) {
             continue;
         }
-        let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
         let bounds_ts = match bound {
             NeededBound::Debug => quote! { ::core::fmt::Debug },
             NeededBound::Display => quote! { ::core::fmt::Display },
-            NeededBound::Both => quote! { ::core::fmt::Debug + ::core::fmt::Display },
             NeededBound::None => unreachable!(),
         };
-        let predicate: syn::WherePredicate = syn::parse_quote! { #ident: #bounds_ts };
-        wc.predicates.push(predicate);
+
+        let referenced = referenced_type_params(ty, &type_params, self_type);
+        if referenced.is_empty() {
+            continue;
+        }
+
+        if contains_self_type(ty, self_type) {
+            for name in referenced {
+                let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+                let predicate: syn::WherePredicate = syn::parse_quote! { #ident: #bounds_ts };
+                wc.predicates.push(predicate);
+            }
+        } else {
+            let predicate: syn::WherePredicate = syn::parse_quote! { #ty: #bounds_ts };
+            wc.predicates.push(predicate);
+        }
     }
 
     wc
@@ -167,11 +204,11 @@ fn synthesize_where(generics: &Generics, field_types: &[(&Type, &FieldPlan)], de
 /// the quotes that `&"REDACTED"` would produce.
 pub fn emit_debug_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenStream {
     let name = &input.ident;
-    // We discard the inherited where_clause and synthesize one tailored to
-    // this derive: minimum bounds on type params, based on per-field needs.
+    // We extend the inherited where_clause with the field-type predicates
+    // this derive needs.
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
     let field_types: Vec<(&syn::Type, &FieldPlan)> = fields.iter().map(|f| (&f.ty, &f.plan)).collect();
-    let synthesized_wc = synthesize_where(&input.generics, &field_types, Derive::DebugDerive);
+    let synthesized_wc = synthesize_where(&input.generics, name, &field_types, Derive::DebugDerive);
     let name_str = name.to_string();
 
     let body = if fields.is_empty() {
@@ -283,11 +320,11 @@ pub fn emit_debug_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenStr
 /// braces), matching the Debug derive and the spec.
 pub fn emit_display_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenStream {
     let name = &input.ident;
-    // We discard the inherited where_clause and synthesize one tailored to
-    // this derive: minimum bounds on type params, based on per-field needs.
+    // We extend the inherited where_clause with the field-type predicates
+    // this derive needs.
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
     let field_types: Vec<(&syn::Type, &FieldPlan)> = fields.iter().map(|f| (&f.ty, &f.plan)).collect();
-    let synthesized_wc = synthesize_where(&input.generics, &field_types, Derive::DisplayDerive);
+    let synthesized_wc = synthesize_where(&input.generics, name, &field_types, Derive::DisplayDerive);
     let name_str = name.to_string();
 
     let body = if fields.is_empty() {

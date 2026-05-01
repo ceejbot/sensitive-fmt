@@ -63,7 +63,11 @@ One attribute, three modifiers (mutually exclusive):
   named-field struct instead.
 - Container types (`Option<T>`, `Vec<T>`, etc.) are treated as opaque. If you have an `Option<String>` field you can't
   `Display`-format directly, reach for `redact` or `skip`.
+- Generic structs are supported by adding trait bounds on the actual formatted field type. Plain fields require
+  `Debug` for `SensitiveDebug` or `Display` for `SensitiveDisplay`; `truncate` always requires `Display`; `redact` and
+  `skip` do not add formatting bounds.
 - `no_std` compatible. Requires `alloc` for the `truncate` modifier.
+- Minimum supported Rust version: 1.88.0.
 - Truncate counts code points, not graphemes. `"café"` is 4 code points.
 
 ## Why not [other crate]?
