@@ -4,7 +4,6 @@ use proc_macro2::Ident;
 use syn::{Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Meta};
 
 /// What to emit for a single field.
-#[derive(Debug)]
 pub enum FieldPlan {
     /// No `#[sensitive(...)]` attribute on this field. Emit normal
     /// Debug/Display.
@@ -18,7 +17,6 @@ pub enum FieldPlan {
 }
 
 /// One field of the user's struct, distilled to (name, type, plan).
-#[derive(Debug)]
 pub struct PlannedField {
     pub ident: Ident,
     pub ty: syn::Type,
@@ -50,7 +48,7 @@ pub fn plan_struct(input: &DeriveInput, derive_name: &str) -> syn::Result<Vec<Pl
         Data::Enum(_) => {
             return Err(syn::Error::new_spanned(
                 &input.ident,
-                format!("{derive_name} does not support enums in 0.x; wrap variant payloads in a struct"),
+                format!("{derive_name} does not support enums; wrap variant payloads in a struct"),
             ));
         }
         Data::Union(_) => {

@@ -22,7 +22,7 @@ coverage:
 
 # Run the same checks we run in CI. Requires nightly.
 @ci: test lint audit
-    cargo clippy --all-targets
+    cargo clippy --all-targets -- -D warnings
     cargo test --doc
     cargo build --manifest-path tests/no_std_build/Cargo.toml
 

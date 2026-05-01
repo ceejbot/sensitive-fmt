@@ -333,6 +333,13 @@ pub fn emit_display_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenS
         let empty_lit = format!("{name_str} {{}}");
         quote! { __f.write_str(#empty_lit) }
     } else {
+        let any_truncate = fields.iter().any(|f| matches!(f.plan, FieldPlan::Truncate(_)));
+        let alloc_import = if any_truncate {
+            quote! { extern crate alloc as __sensitive_fmt_alloc; }
+        } else {
+            quote! {}
+        };
+
         let mut writes: Vec<TokenStream> = Vec::new();
         // Open brace.
         let prefix = format!("{name_str} {{ ");
@@ -358,7 +365,6 @@ pub fn emit_display_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenS
                     let n_lit = *n;
                     writes.push(quote! {
                         {
-                            extern crate alloc as __sensitive_fmt_alloc;
                             let __s = __sensitive_fmt_alloc::format!("{}", &self.#ident);
                             let __count = __s.chars().count() as u64;
                             if __count >= #n_lit as u64 {
@@ -376,7 +382,10 @@ pub fn emit_display_impl(input: &DeriveInput, fields: &[PlannedField]) -> TokenS
             }
         }
         writes.push(quote! { __f.write_str(" }") });
-        quote! { #(#writes)* }
+        quote! {
+            #alloc_import
+            #(#writes)*
+        }
     };
 
     quote! {
