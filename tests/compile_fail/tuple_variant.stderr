@@ -1,0 +1,5 @@
+error: SensitiveDebug does not support tuple variants; use named fields or wrap the payload in a struct
+ --> tests/compile_fail/tuple_variant.rs:6:5
+  |
+6 |     Tupled(u64, String),
+  |     ^^^^^^

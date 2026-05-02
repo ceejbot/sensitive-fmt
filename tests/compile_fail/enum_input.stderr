@@ -1,5 +1,0 @@
-error: SensitiveDebug does not support enums; wrap variant payloads in a struct
- --> tests/compile_fail/enum_input.rs:4:6
-  |
-4 | enum Bad { A, B }
-  |      ^^^

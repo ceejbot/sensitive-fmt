@@ -59,8 +59,7 @@ One attribute, three modifiers (mutually exclusive):
 
 ## Scope
 
-- Named-field structs only. Tuple structs and enums fail at compile time with a clear message. Wrap the data in a
-  named-field struct instead.
+- Tuples fail at compile time with a clear message. Wrap the data in a named-field struct or enum instead.
 - Container types (`Option<T>`, `Vec<T>`, etc.) are treated as opaque. If you have an `Option<String>` field you can't
   `Display`-format directly, reach for `redact` or `skip`.
 - Generic structs are supported by adding trait bounds on the actual formatted field type. Plain fields require

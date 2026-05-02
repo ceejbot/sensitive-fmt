@@ -34,3 +34,28 @@ pub fn render<W: core::fmt::Write>(r: &Record, w: &mut W) -> core::fmt::Result {
     write!(w, " | ")?;
     write!(w, "{}", r)
 }
+
+/// Enum input with unit and named-field variants but no `truncate`. This
+/// stays purely `core` — the `extern crate alloc` import only kicks in when a
+/// `truncate` field exists. If we accidentally start pulling `alloc` in for
+/// the redact/skip path, this sub-crate stops building.
+#[derive(SensitiveDebug, SensitiveDisplay)]
+pub enum Event {
+    Heartbeat,
+    Login {
+        user_id: u64,
+        #[sensitive(redact)]
+        token: &'static str,
+    },
+    Failure {
+        code: u32,
+        #[sensitive(skip)]
+        _detail: NotFormattable,
+    },
+}
+
+pub fn render_event<W: core::fmt::Write>(e: &Event, w: &mut W) -> core::fmt::Result {
+    write!(w, "{:?}", e)?;
+    write!(w, " | ")?;
+    write!(w, "{}", e)
+}

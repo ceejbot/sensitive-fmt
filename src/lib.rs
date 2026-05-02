@@ -36,8 +36,8 @@ mod parse;
 #[proc_macro_derive(SensitiveDebug, attributes(sensitive))]
 pub fn derive_sensitive_debug(input: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
-    match parse::plan_struct(&ast, "SensitiveDebug") {
-        Ok(fields) => codegen::emit_debug_impl(&ast, &fields).into(),
+    match parse::plan_input(&ast, "SensitiveDebug") {
+        Ok(plan) => codegen::emit_debug_impl(&ast, &plan).into(),
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -45,8 +45,8 @@ pub fn derive_sensitive_debug(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(SensitiveDisplay, attributes(sensitive))]
 pub fn derive_sensitive_display(input: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
-    match parse::plan_struct(&ast, "SensitiveDisplay") {
-        Ok(fields) => codegen::emit_display_impl(&ast, &fields).into(),
+    match parse::plan_input(&ast, "SensitiveDisplay") {
+        Ok(plan) => codegen::emit_display_impl(&ast, &plan).into(),
         Err(err) => err.to_compile_error().into(),
     }
 }

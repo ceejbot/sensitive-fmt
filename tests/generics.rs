@@ -209,3 +209,88 @@ fn phantom_data_field_does_not_overbound_type_param() {
         "PhantomHolder { id: 1, marker: PhantomData<generics::NotFormattable> }"
     );
 }
+
+// ---- Enum generics ----
+
+#[derive(SensitiveDebug, SensitiveDisplay)]
+enum Container<T> {
+    Holder { id: u64, value: T },
+    Empty,
+}
+
+#[derive(SensitiveDebug, SensitiveDisplay)]
+enum RedactedContainer<T> {
+    Wrapped {
+        id: u64,
+        #[sensitive(redact)]
+        _value: T,
+    },
+}
+
+#[derive(SensitiveDebug)]
+#[allow(dead_code)]
+enum Tree<T> {
+    Leaf {
+        value: T,
+    },
+    Node {
+        left: Box<Self>,
+        right: Box<Self>,
+        value: T,
+    },
+}
+
+#[derive(SensitiveDebug)]
+#[allow(dead_code)]
+enum PhantomEnum<T> {
+    Marked {
+        id: u64,
+        marker: core::marker::PhantomData<T>,
+    },
+}
+
+#[test]
+fn generic_enum_struct_variant_renders() {
+    let c: Container<u32> = Container::Holder { id: 1, value: 99 };
+    assert_eq!(format!("{c:?}"), "Holder { id: 1, value: 99 }");
+    assert_eq!(format!("{c}"), "Holder { id: 1, value: 99 }");
+    let e: Container<u32> = Container::Empty;
+    assert_eq!(format!("{e:?}"), "Empty");
+}
+
+#[test]
+fn generic_enum_redact_drops_bounds_on_t() {
+    // Compiles ONLY if no `T: Debug` / `T: Display` bound is synthesized for
+    // the redacted variant field. NotFormattable has neither impl.
+    let r: RedactedContainer<NotFormattable> = RedactedContainer::Wrapped {
+        id: 1,
+        _value: NotFormattable,
+    };
+    assert_eq!(format!("{r:?}"), "Wrapped { id: 1, _value: REDACTED }");
+    assert_eq!(format!("{r}"), "Wrapped { id: 1, _value: REDACTED }");
+}
+
+#[test]
+fn recursive_enum_compiles_and_renders() {
+    let t: Tree<u32> = Tree::Node {
+        left: Box::new(Tree::Leaf { value: 1 }),
+        right: Box::new(Tree::Leaf { value: 2 }),
+        value: 3,
+    };
+    let s = format!("{t:?}");
+    assert!(s.starts_with("Node { left: Leaf { value: 1 }"));
+    assert!(s.contains("right: Leaf { value: 2 }"));
+    assert!(s.ends_with("value: 3 }"));
+}
+
+#[test]
+fn phantom_data_in_enum_does_not_overbound() {
+    // Same field-type-bound logic as PhantomHolder, but the field lives in an
+    // enum variant. `NotFormattable: !Debug` must not block compilation.
+    let p: PhantomEnum<NotFormattable> = PhantomEnum::Marked {
+        id: 1,
+        marker: core::marker::PhantomData,
+    };
+    let s = format!("{p:?}");
+    assert!(s.starts_with("Marked { id: 1, marker: PhantomData"));
+}

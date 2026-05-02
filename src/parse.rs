@@ -23,42 +23,79 @@ pub struct PlannedField {
     pub plan: FieldPlan,
 }
 
-/// Parse a `DeriveInput` into the struct ident, generics, and per-field plans.
+/// One variant of an enum input, distilled to its name and shape.
+pub struct PlannedVariant {
+    pub ident: Ident,
+    pub shape: VariantShape,
+}
+
+/// Shape of a single enum variant. Tuple variants are rejected at parse time.
+pub enum VariantShape {
+    /// `Variant` — no payload.
+    Unit,
+    /// `Variant { ... }` — named fields, possibly empty.
+    Struct(Vec<PlannedField>),
+}
+
+/// Top-level distilled view of the user's input — either a named-field struct
+/// or an enum whose variants are all unit or named-field shaped.
+pub enum Plan {
+    Struct(Vec<PlannedField>),
+    Enum(Vec<PlannedVariant>),
+}
+
+/// Parse a `DeriveInput` into a `Plan`.
 ///
-/// Returns a `syn::Error` if the input is anything other than a named-field
-/// struct (tuple struct, unit struct, enum, union — all rejected here).
-pub fn plan_struct(input: &DeriveInput, derive_name: &str) -> syn::Result<Vec<PlannedField>> {
-    let named: &FieldsNamed = match &input.data {
+/// Returns a `syn::Error` for tuple structs, unit structs, unions, and tuple
+/// enum variants. Empty enums (`enum Foo {}`) are accepted: codegen emits an
+/// uninhabited `match self {}` body.
+pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
+    match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(n),
             ..
-        }) => n,
+        }) => Ok(Plan::Struct(plan_named_fields(n)?)),
         Data::Struct(DataStruct {
             fields: Fields::Unnamed(_),
             ..
         })
         | Data::Struct(DataStruct {
             fields: Fields::Unit, ..
-        }) => {
-            return Err(syn::Error::new_spanned(
-                &input.ident,
-                format!("{derive_name} requires a struct with named fields"),
-            ));
+        }) => Err(syn::Error::new_spanned(
+            &input.ident,
+            format!("{derive_name} requires a struct with named fields"),
+        )),
+        Data::Enum(e) => {
+            let mut variants = Vec::with_capacity(e.variants.len());
+            for variant in &e.variants {
+                let shape = match &variant.fields {
+                    Fields::Named(n) => VariantShape::Struct(plan_named_fields(n)?),
+                    Fields::Unit => VariantShape::Unit,
+                    Fields::Unnamed(_) => {
+                        return Err(syn::Error::new_spanned(
+                            &variant.ident,
+                            format!(
+                                "{derive_name} does not support tuple variants; \
+                                 use named fields or wrap the payload in a struct"
+                            ),
+                        ));
+                    }
+                };
+                variants.push(PlannedVariant {
+                    ident: variant.ident.clone(),
+                    shape,
+                });
+            }
+            Ok(Plan::Enum(variants))
         }
-        Data::Enum(_) => {
-            return Err(syn::Error::new_spanned(
-                &input.ident,
-                format!("{derive_name} does not support enums; wrap variant payloads in a struct"),
-            ));
-        }
-        Data::Union(_) => {
-            return Err(syn::Error::new_spanned(
-                &input.ident,
-                format!("{derive_name} does not support unions"),
-            ));
-        }
-    };
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            &input.ident,
+            format!("{derive_name} does not support unions"),
+        )),
+    }
+}
 
+fn plan_named_fields(named: &FieldsNamed) -> syn::Result<Vec<PlannedField>> {
     let mut planned = Vec::with_capacity(named.named.len());
     for field in &named.named {
         let ident = field.ident.clone().expect("Fields::Named guarantees named fields");
