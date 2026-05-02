@@ -1,6 +1,6 @@
 [package]
 name = "sensitive-fmt"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["C J Silverio <ceejceej@gmail.com>"]
 categories = ["development-tools::procedural-macro-helpers"]
 description = "Derive Debug and Display while honoring #[sensitive(redact | truncate = N | skip)] field attributes."
