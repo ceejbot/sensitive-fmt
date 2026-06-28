@@ -18,10 +18,14 @@ jobs:
         run: |
           curl -L --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/cargo-bins/cargo-binstall/492941711f3351597237bd85cd7320bb2a03040d/install-from-binstall-release.sh | bash
-          cargo binstall --no-confirm cargo-audit
+          cargo binstall --no-confirm cargo-audit cargo-deny
 
       - uses: actions/checkout@v5
 
       - name: Run `cargo audit`
         shell: bash
         run: cargo audit
+
+      - name: Run `cargo deny`
+        shell: bash
+        run: cargo deny check

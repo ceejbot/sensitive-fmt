@@ -15,12 +15,13 @@ coverage:
 # Run a security audit
 @audit:
     cargo audit
+    cargo deny check --config .cargo/deny.toml
 
 # Run a format check.
 @lint:
     cargo +nightly fmt --check
 
-# Run the same checks we run in CI. Requires nightly.
+# Run the same checks we run in CI.
 @ci: test lint audit
     cargo clippy --all-targets -- -D warnings
     cargo test --doc
@@ -36,7 +37,7 @@ setup:
         rustup update
     fi
     brew tap ceejbot/tap
-    brew install cargo-nextest tomato semver-bump cargo-audit cargo-llvm-cov
+    brew install cargo-nextest tomato semver-bump cargo-audit cargo-deny cargo-llvm-cov
     rustup install nightly
 
 # Tag a new version for release.

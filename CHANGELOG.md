@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 — 2026-06-28
+
+### Added
+
+- Add enum support for unit variants and named-field variants. Tuple variants
+  still fail at compile time with a targeted diagnostic.
+- Add field-type bound synthesis for generic inputs, including associated types,
+  recursive `Self` references, and `PhantomData<T>`-style fields.
+
 ## 0.1.1 — 2026-04-30
 
 ### Changed
