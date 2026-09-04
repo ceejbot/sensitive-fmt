@@ -7,12 +7,11 @@ error[E0277]: `NotDebug` doesn't implement `Debug`
    |                      required by this formatting parameter
    |
    = help: the trait `Debug` is not implemented for `NotDebug`
-   = note: add `#[derive(Debug)]` to `NotDebug` or manually `impl Debug for NotDebug`
-help: the trait `Debug` is implemented for `Wrapper<T>`
+help: the trait `Debug` is conditionally implemented for `Wrapper<T>`
   --> tests/compile_fail/associated_debug_missing_bound.rs:15:10
    |
 15 | #[derive(SensitiveDebug)]
-   |          ^^^^^^^^^^^^^^
+   |          ^^^^^^^^^^^^^^ unsatisfied requirement introduced here: `<Demo as HasAssoc>::Assoc: Debug`
 note: required for `Wrapper<Demo>` to implement `Debug`
   --> tests/compile_fail/associated_debug_missing_bound.rs:16:8
    |

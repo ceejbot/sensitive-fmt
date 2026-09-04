@@ -73,7 +73,7 @@ fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, self_type: &Id
         Type::Ptr(p) => collect_type_params(&p.elem, type_params, self_type, found),
         Type::Paren(p) => collect_type_params(&p.elem, type_params, self_type, found),
         Type::Group(g) => collect_type_params(&g.elem, type_params, self_type, found),
-        Type::BareFn(f) => {
+        Type::FnPtr(f) => {
             for arg in &f.inputs {
                 collect_type_params(&arg.ty, type_params, self_type, found);
             }
@@ -131,7 +131,7 @@ fn contains_self_type(ty: &Type, self_type: &Ident) -> bool {
         Type::Ptr(p) => contains_self_type(&p.elem, self_type),
         Type::Paren(p) => contains_self_type(&p.elem, self_type),
         Type::Group(g) => contains_self_type(&g.elem, self_type),
-        Type::BareFn(f) => {
+        Type::FnPtr(f) => {
             f.inputs.iter().any(|arg| contains_self_type(&arg.ty, self_type))
                 || matches!(&f.output, syn::ReturnType::Type(_, ret_ty) if contains_self_type(ret_ty, self_type))
         }

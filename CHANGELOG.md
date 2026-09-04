@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Upgrade `syn` from 2 to 3. The only source change is the rename of the
+  function-pointer type variant (`Type::BareFn` → `Type::FnPtr`) in bound
+  synthesis. Generated code, error messages, features, and the 1.88.0 MSRV
+  are unchanged.
+- Re-bless three `compile_fail` snapshots for rustc 1.98's reworded
+  "conditionally implemented" diagnostics. Test-only; no behavior change.
+
 ## 0.2.0 — 2026-06-28
 
 ### Added

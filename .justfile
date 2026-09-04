@@ -15,7 +15,7 @@ coverage:
 # Run a security audit
 @audit:
     cargo audit
-    cargo deny check --config .cargo/deny.toml
+    cargo deny --config .cargo/deny.toml check
 
 # Run a format check.
 @lint:

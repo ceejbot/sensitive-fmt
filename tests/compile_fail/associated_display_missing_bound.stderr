@@ -12,11 +12,11 @@ help: the trait `std::fmt::Display` is not implemented for `NotDisplay`
  7 | struct NotDisplay;
    | ^^^^^^^^^^^^^^^^^
    = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
-help: the trait `std::fmt::Display` is implemented for `Wrapper<T>`
+help: the trait `std::fmt::Display` is conditionally implemented for `Wrapper<T>`
   --> tests/compile_fail/associated_display_missing_bound.rs:15:10
    |
 15 | #[derive(SensitiveDisplay)]
-   |          ^^^^^^^^^^^^^^^^
+   |          ^^^^^^^^^^^^^^^^ unsatisfied requirement introduced here: `<Demo as HasAssoc>::Assoc: std::fmt::Display`
 note: required for `Wrapper<Demo>` to implement `std::fmt::Display`
   --> tests/compile_fail/associated_display_missing_bound.rs:16:8
    |
