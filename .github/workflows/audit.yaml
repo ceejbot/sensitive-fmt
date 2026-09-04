@@ -20,7 +20,9 @@ jobs:
             https://raw.githubusercontent.com/cargo-bins/cargo-binstall/492941711f3351597237bd85cd7320bb2a03040d/install-from-binstall-release.sh | bash
           cargo binstall --no-confirm cargo-audit cargo-deny
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run `cargo audit`
         shell: bash
