@@ -55,3 +55,28 @@ fn recursive_debug_struct_compiles_and_renders() {
     let node = Node { value: 1, next: None };
     assert_eq!(format!("{node:?}"), "Node { value: 1, next: None }");
 }
+
+/// Raw identifiers print without the `r#` prefix, matching std's derive.
+#[derive(SensitiveDebug, sensitive_fmt::SensitiveDisplay)]
+#[allow(dead_code)]
+struct Raw {
+    r#type: u32,
+    #[sensitive(redact)]
+    r#ref: String,
+}
+
+#[test]
+fn raw_identifier_labels_match_std() {
+    #[derive(Debug)]
+    #[allow(dead_code)]
+    struct Std {
+        r#type: u32,
+    }
+    assert_eq!(format!("{:?}", Std { r#type: 1 }), "Std { type: 1 }");
+    let r = Raw {
+        r#type: 1,
+        r#ref: "x".into(),
+    };
+    assert_eq!(format!("{r:?}"), "Raw { type: 1, ref: REDACTED }");
+    assert_eq!(format!("{r}"), "Raw { type: 1, ref: REDACTED }");
+}

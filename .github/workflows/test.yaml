@@ -45,13 +45,15 @@ jobs:
             - name: Install cargo-nextest and cargo-llvm-cov
               shell: bash
               run: |
+                  # Versions are pinned so a release of either tool cannot change
+                  # what CI runs without a commit here.
                   if [[ -z $(which cargo-nextest) ]]; then
-                    curl -sL https://get.nexte.st/latest/linux -o nextest.tgz
+                    curl -sL --proto '=https' --tlsv1.2 https://get.nexte.st/0.9.148/linux -o nextest.tgz
                     tar xfz nextest.tgz
                     mv cargo-nextest /home/runner/.cargo/bin
                   fi
                   if [[ -z $(which cargo-llvm-cov) ]]; then
-                    curl -sL https://github.com/taiki-e/cargo-llvm-cov/releases/latest/download/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz -o cargo-llvm-cov.tgz
+                    curl -sL --proto '=https' --tlsv1.2 https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.8.5/cargo-llvm-cov-x86_64-unknown-linux-gnu.tar.gz -o cargo-llvm-cov.tgz
                     tar xfz cargo-llvm-cov.tgz
                     mv cargo-llvm-cov /home/runner/.cargo/bin
                   fi

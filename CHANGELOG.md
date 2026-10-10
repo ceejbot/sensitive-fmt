@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### Fixed
+
+- Reject `#[sensitive(...)]` on structs, enums, and variants with a compile
+  error. rustc accepts derive helper attributes anywhere inside the item, so a
+  misplaced attribute used to be a silent no-op that printed the field in full.
+- Print raw-identifier field names without the `r#` prefix (`type:` rather
+  than `r#type:`), matching std's `#[derive(Debug)]`.
+- Recognize associated-type shorthand (`T::Value`) when synthesizing bounds.
+  Such fields used to get no predicate and fail with E0277.
+- Treat the `Self` keyword as recursive in bound synthesis. A field type
+  naming both a parameter and `Self`, such as `(T, Box<Self>)`, used to emit a
+  self-referential predicate and fail with E0275.
+- Bind enum variant fields to positional locals inside generated match arms,
+  so a field named `__f` or `__builder` no longer shadows generated locals.
+
+### Changed
+
+- The Display derive now routes `truncate` through the same local marker
+  enum the Debug derive uses, so the generated code holds exactly one copy of
+  the truncation algorithm. Output is unchanged.
+- Document the attribute grammar on the crate and on both derives, so
+  docs.rs shows it without a trip to the README.
+- Audit workflow now runs weekly, watches the deny config that actually
+  exists, and drops the default token permissions. Test workflow pins the
+  nextest and llvm-cov binaries it downloads.
+
+## 0.2.1 — 2026-09-04
+
 ### Changed
 
 - Upgrade `syn` from 2 to 3. The only source change is the rename of the

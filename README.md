@@ -2,8 +2,8 @@
 
 [![Tests](https://github.com/ceejbot/sensitive-fmt/actions/workflows/test.yaml/badge.svg)](https://github.com/ceejbot/sensitive-fmt/actions/workflows/test.yaml) [![audit-dependencies](https://github.com/ceejbot/sensitive-fmt/actions/workflows/audit.yaml/badge.svg)](https://github.com/ceejbot/sensitive-fmt/actions/workflows/audit.yaml)
 
-Derive `Debug` and `Display` for Rust structs while honoring sensitive field annotations. Designed for one job: keeping
-PHI, PII, secrets, and tokens out of log lines.
+Derive `Debug` and `Display` for Rust structs and enums while honoring sensitive field annotations. Designed for one
+job: keeping PHI, PII, secrets, and tokens out of log lines.
 
 I wrote this because none of the crates I could find (including my own [safe-debug](https://github.com/ceejbot/safe-debug) ) did exactly what I wanted as simply as I wanted to do it. This sensitive data redactor:
 
@@ -57,9 +57,33 @@ One attribute, three modifiers (mutually exclusive):
 | `#[sensitive(truncate = N)]` | writes `****<last N code points>`, or `REDACTED` if value has fewer than N code points | `Display` (in both derives)                                    |
 | `#[sensitive(skip)]`         | writes `<skipped>`                                                                     | none                                                           |
 
+Enums with unit and named-field variants work the same way. Output is prefixed with the variant name, as std's
+`#[derive(Debug)]` does:
+
+```rust
+use sensitive_fmt::{SensitiveDebug, SensitiveDisplay};
+
+#[derive(SensitiveDebug, SensitiveDisplay)]
+enum Event {
+    Heartbeat,
+    Login {
+        user_id: u64,
+        #[sensitive(redact)]
+        token: String,
+    },
+}
+
+let e = Event::Login { user_id: 7, token: "sk_live_abc".into() };
+assert_eq!(format!("{e:?}"), "Login { user_id: 7, token: REDACTED }");
+assert_eq!(format!("{}", Event::Heartbeat), "Heartbeat");
+```
+
 ## Scope
 
-- Tuples fail at compile time with a clear message. Wrap the data in a named-field struct or enum instead.
+- The attribute goes on fields only. Placing it on a struct, enum, or variant is a compile error rather than a
+  silent no-op.
+- Tuple structs and tuple variants fail at compile time with a clear message. Wrap the data in a named-field struct
+  or variant instead.
 - Container types (`Option<T>`, `Vec<T>`, etc.) are treated as opaque. If you have an `Option<String>` field you can't
   `Display`-format directly, reach for `redact` or `skip`.
 - Generic structs are supported by adding trait bounds on the actual formatted field type. Plain fields require

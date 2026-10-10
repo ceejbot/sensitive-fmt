@@ -1,0 +1,11 @@
+error: #[sensitive(...)] is only valid on fields
+ --> tests/compile_fail/item_attribute.rs:4:1
+  |
+4 | #[sensitive(redact)]
+  | ^^^^^^^^^^^^^^^^^^^^
+
+error: #[sensitive(...)] is only valid on fields
+  --> tests/compile_fail/item_attribute.rs:10:1
+   |
+10 | #[sensitive(skip)]
+   | ^^^^^^^^^^^^^^^^^^

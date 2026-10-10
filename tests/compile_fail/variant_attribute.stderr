@@ -1,0 +1,5 @@
+error: #[sensitive(...)] is only valid on fields
+ --> tests/compile_fail/variant_attribute.rs:5:5
+  |
+5 |     #[sensitive(redact)]
+  |     ^^^^^^^^^^^^^^^^^^^^

@@ -6,8 +6,16 @@ on:
     paths:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
-      - ".cargo/audit.toml"
+      - ".cargo/deny.toml"
+      - ".github/workflows/audit.yaml"
+  schedule:
+    # Weekly, so a new advisory against an existing dependency is noticed
+    # without waiting for the next manifest edit.
+    - cron: "17 6 * * 1"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   security_audit:

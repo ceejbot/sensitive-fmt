@@ -294,3 +294,44 @@ fn phantom_data_in_enum_does_not_overbound() {
     let s = format!("{p:?}");
     assert!(s.starts_with("Marked { id: 1, marker: PhantomData"));
 }
+
+// ---- Bound inference edge shapes ----
+
+trait Values {
+    type Value;
+}
+
+impl Values for DemoTypes {
+    type Value = u32;
+}
+
+/// `T::Value` shorthand must be recognized as referencing `T`, so the
+/// synthesized predicate `T::Value: Debug` is emitted.
+#[derive(SensitiveDebug, SensitiveDisplay)]
+struct Shorthand<T: Values> {
+    value: T::Value,
+}
+
+/// A field type that mentions both a parameter and the `Self` keyword must
+/// fall back to per-parameter bounds, exactly as it does for `Tree<T>`.
+#[derive(SensitiveDebug)]
+#[allow(dead_code)]
+enum SelfPair<T> {
+    Leaf { value: T },
+    Node { pair: (T, Box<Self>) },
+}
+
+#[test]
+fn associated_type_shorthand_compiles_and_renders() {
+    let s = Shorthand::<DemoTypes> { value: 7 };
+    assert_eq!(format!("{s:?}"), "Shorthand { value: 7 }");
+    assert_eq!(format!("{s}"), "Shorthand { value: 7 }");
+}
+
+#[test]
+fn self_keyword_with_type_param_compiles_and_renders() {
+    let t: SelfPair<u32> = SelfPair::Node {
+        pair: (1, Box::new(SelfPair::Leaf { value: 2 })),
+    };
+    assert_eq!(format!("{t:?}"), "Node { pair: (1, Leaf { value: 2 }) }");
+}

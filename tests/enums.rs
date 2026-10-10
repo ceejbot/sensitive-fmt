@@ -175,3 +175,26 @@ fn debug_pretty_print_works_for_struct_variant() {
     assert!(pretty.contains("breed: \"Tabby\","));
     assert!(pretty.contains("insurance_id: REDACTED,"));
 }
+
+/// Field names that match the generated locals must not shadow them. Each
+/// variant field is bound to a prefixed name inside the match arm.
+#[derive(SensitiveDebug, SensitiveDisplay)]
+enum Hostile {
+    Clash {
+        __f: u32,
+        __builder: u32,
+        #[sensitive(truncate = 2)]
+        __s: String,
+    },
+}
+
+#[test]
+fn variant_fields_named_like_generated_locals_compile() {
+    let h = Hostile::Clash {
+        __f: 1,
+        __builder: 2,
+        __s: "abcd".into(),
+    };
+    assert_eq!(format!("{h:?}"), "Clash { __f: 1, __builder: 2, __s: ****cd }");
+    assert_eq!(format!("{h}"), "Clash { __f: 1, __builder: 2, __s: ****cd }");
+}

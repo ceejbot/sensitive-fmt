@@ -3,7 +3,8 @@
 use std::collections::BTreeSet;
 
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 use syn::{DeriveInput, Generics, Type, WhereClause};
 
 use crate::parse::{FieldPlan, Plan, PlannedField, PlannedVariant, VariantShape};
@@ -45,8 +46,11 @@ fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, self_type: &Id
                 collect_type_params(&qself.ty, type_params, self_type, found);
             }
 
+            // A type parameter appears either alone (`T`) or as the head of
+            // an associated-type shorthand (`T::Value`); either way it is the
+            // first segment of an unqualified path.
             if tp.qself.is_none()
-                && tp.path.segments.len() == 1
+                && tp.path.leading_colon.is_none()
                 && let Some(seg) = tp.path.segments.first()
             {
                 let name = seg.ident.to_string();
@@ -118,11 +122,11 @@ fn contains_self_type(ty: &Type, self_type: &Ident) -> bool {
             tp.qself
                 .as_ref()
                 .is_some_and(|qself| contains_self_type(&qself.ty, self_type))
-                || tp
-                    .path
-                    .segments
-                    .iter()
-                    .any(|seg| seg.ident == *self_type || path_arguments_contain_self(&seg.arguments, self_type))
+                || tp.path.segments.iter().any(|seg| {
+                    seg.ident == *self_type
+                        || seg.ident == "Self"
+                        || path_arguments_contain_self(&seg.arguments, self_type)
+                })
         }
         Type::Reference(r) => contains_self_type(&r.elem, self_type),
         Type::Array(a) => contains_self_type(&a.elem, self_type),
@@ -232,8 +236,10 @@ fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
         quote! {
             __SensitiveFmtMarkers::Truncated(__s, __n) => {
                 let __count = __s.chars().count();
-                if __count >= *__n as usize {
-                    let __nm1 = (*__n as usize) - 1;
+                // Compare in u64 so a 16-bit `usize` cannot wrap `__n`; once
+                // inside the branch `__n <= __count`, so it fits in usize.
+                if (__count as u64) >= (*__n as u64) {
+                    let __nm1 = (*__n as usize).saturating_sub(1);
                     let __start = __s.char_indices().nth_back(__nm1)
                         .map(|(__i, _)| __i).unwrap_or(0);
                     __mf.write_str("****")?;
@@ -250,6 +256,8 @@ fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
         #alloc_import
         // Local marker enum with a Debug impl that writes bare strings or
         // truncated tails. Scoped to this fmt body so it doesn't leak.
+        // Which variants get constructed depends on the user's attributes.
+        #[allow(dead_code)]
         enum __SensitiveFmtMarkers {
             Redacted,
             Skipped,
@@ -270,7 +278,7 @@ fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
 /// One `__builder.field(...)` call for a single field, parameterized by the
 /// access expression (`&self.foo` for structs, `foo` for enum match arms).
 fn debug_field_call(field: &PlannedField, access: &TokenStream) -> TokenStream {
-    let label = field.ident.to_string();
+    let label = field.ident.unraw().to_string();
     match &field.plan {
         FieldPlan::Plain => quote! {
             __builder.field(#label, #access);
@@ -298,8 +306,10 @@ fn debug_field_call(field: &PlannedField, access: &TokenStream) -> TokenStream {
 
 /// One field's worth of Display writes (label + value), parameterized by the
 /// access expression. Caller emits separators and the surrounding braces.
+/// Truncation goes through the same marker enum the Debug derive uses, so
+/// there is exactly one copy of the algorithm in the generated code.
 fn display_field_writes(field: &PlannedField, access: &TokenStream) -> TokenStream {
-    let label = format!("{}: ", field.ident);
+    let label = format!("{}: ", field.ident.unraw());
     let value = match &field.plan {
         FieldPlan::Plain => quote! {
             ::core::fmt::Display::fmt(#access, __f)?;
@@ -313,19 +323,13 @@ fn display_field_writes(field: &PlannedField, access: &TokenStream) -> TokenStre
         FieldPlan::Truncate(n) => {
             let n_lit = *n;
             quote! {
-                {
-                    let __s = __sensitive_fmt_alloc::format!("{}", #access);
-                    let __count = __s.chars().count() as u64;
-                    if __count >= #n_lit as u64 {
-                        let __nm1 = (#n_lit as usize).saturating_sub(1);
-                        let __start = __s.char_indices().nth_back(__nm1)
-                            .map(|(__i, _)| __i).unwrap_or(0);
-                        __f.write_str("****")?;
-                        __f.write_str(&__s[__start..])?;
-                    } else {
-                        __f.write_str("REDACTED")?;
-                    }
-                }
+                ::core::fmt::Debug::fmt(
+                    &__SensitiveFmtMarkers::Truncated(
+                        __sensitive_fmt_alloc::format!("{}", #access),
+                        #n_lit,
+                    ),
+                    __f,
+                )?;
             }
         }
     };
@@ -341,14 +345,14 @@ fn display_field_writes(field: &PlannedField, access: &TokenStream) -> TokenStre
 fn emit_debug_named_body(
     name_str: &str,
     fields: &[PlannedField],
-    field_access: impl Fn(&Ident) -> TokenStream,
+    field_access: impl Fn(usize, &Ident) -> TokenStream,
 ) -> TokenStream {
     if fields.is_empty() {
         let empty_lit = format!("{name_str} {{}}");
         return quote! { __f.write_str(#empty_lit) };
     }
-    let calls = fields.iter().map(|f| {
-        let access = field_access(&f.ident);
+    let calls = fields.iter().enumerate().map(|(i, f)| {
+        let access = field_access(i, &f.ident);
         debug_field_call(f, &access)
     });
     quote! {
@@ -363,7 +367,7 @@ fn emit_debug_named_body(
 fn emit_display_named_body(
     name_str: &str,
     fields: &[PlannedField],
-    field_access: impl Fn(&Ident) -> TokenStream,
+    field_access: impl Fn(usize, &Ident) -> TokenStream,
 ) -> TokenStream {
     if fields.is_empty() {
         let empty_lit = format!("{name_str} {{}}");
@@ -375,17 +379,36 @@ fn emit_display_named_body(
         if i > 0 {
             writes.push(quote! { __f.write_str(", ")?; });
         }
-        let access = field_access(&f.ident);
+        let access = field_access(i, &f.ident);
         writes.push(display_field_writes(f, &access));
     }
     writes.push(quote! { __f.write_str(" }") });
     quote! { #(#writes)* }
 }
 
+/// Local name the `index`th variant field is bound to inside a match arm.
+/// Binding under the field's own name would let a field called `__f` or
+/// `__builder` shadow the generated locals. Positional names never collide
+/// with each other, and unlike a prefix on the user's ident they never
+/// produce a mid-name `__` that trips `non_snake_case` in the user's crate.
+fn variant_binding(index: usize) -> Ident {
+    format_ident!("__field_{index}")
+}
+
+/// The `Self::Variant { a: __field_0, .. }` pattern shared by both derives.
+fn variant_pattern(v_ident: &Ident, fields: &[PlannedField]) -> TokenStream {
+    let bindings = fields.iter().enumerate().map(|(i, f)| {
+        let ident = &f.ident;
+        let bound = variant_binding(i);
+        quote! { #ident: #bound }
+    });
+    quote! { Self::#v_ident { #(#bindings),* } }
+}
+
 /// Single arm for an enum variant in a Debug match.
 fn emit_debug_variant_arm(variant: &PlannedVariant) -> TokenStream {
     let v_ident = &variant.ident;
-    let v_str = v_ident.to_string();
+    let v_str = v_ident.unraw().to_string();
     match &variant.shape {
         VariantShape::Unit => quote! {
             Self::#v_ident => __f.write_str(#v_str),
@@ -397,10 +420,13 @@ fn emit_debug_variant_arm(variant: &PlannedVariant) -> TokenStream {
                     Self::#v_ident {} => __f.write_str(#empty_lit),
                 };
             }
-            let pat_idents = fields.iter().map(|f| &f.ident);
-            let body = emit_debug_named_body(&v_str, fields, |ident| quote! { #ident });
+            let pattern = variant_pattern(v_ident, fields);
+            let body = emit_debug_named_body(&v_str, fields, |i, _| {
+                let bound = variant_binding(i);
+                quote! { #bound }
+            });
             quote! {
-                Self::#v_ident { #(#pat_idents),* } => { #body },
+                #pattern => { #body },
             }
         }
     }
@@ -409,7 +435,7 @@ fn emit_debug_variant_arm(variant: &PlannedVariant) -> TokenStream {
 /// Single arm for an enum variant in a Display match.
 fn emit_display_variant_arm(variant: &PlannedVariant) -> TokenStream {
     let v_ident = &variant.ident;
-    let v_str = v_ident.to_string();
+    let v_str = v_ident.unraw().to_string();
     match &variant.shape {
         VariantShape::Unit => quote! {
             Self::#v_ident => __f.write_str(#v_str),
@@ -421,10 +447,13 @@ fn emit_display_variant_arm(variant: &PlannedVariant) -> TokenStream {
                     Self::#v_ident {} => __f.write_str(#empty_lit),
                 };
             }
-            let pat_idents = fields.iter().map(|f| &f.ident);
-            let body = emit_display_named_body(&v_str, fields, |ident| quote! { #ident });
+            let pattern = variant_pattern(v_ident, fields);
+            let body = emit_display_named_body(&v_str, fields, |i, _| {
+                let bound = variant_binding(i);
+                quote! { #bound }
+            });
             quote! {
-                Self::#v_ident { #(#pat_idents),* } => { #body },
+                #pattern => { #body },
             }
         }
     }
@@ -445,14 +474,14 @@ pub fn emit_debug_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
     let field_types = collect_field_types(plan);
     let synthesized_wc = synthesize_where(&input.generics, name, &field_types, Derive::DebugDerive);
-    let name_str = name.to_string();
+    let name_str = name.unraw().to_string();
 
     let any_marked = field_types.iter().any(|(_, p)| !matches!(p, FieldPlan::Plain));
     let any_truncate = field_types.iter().any(|(_, p)| matches!(p, FieldPlan::Truncate(_)));
     let marker_decl = build_marker_decl(any_marked, any_truncate);
 
     let body = match plan {
-        Plan::Struct(fields) => emit_debug_named_body(&name_str, fields, |ident| quote! { &self.#ident }),
+        Plan::Struct(fields) => emit_debug_named_body(&name_str, fields, |_, ident| quote! { &self.#ident }),
         Plan::Enum(variants) => {
             if variants.is_empty() {
                 quote! { match *self {} }
@@ -479,22 +508,21 @@ pub fn emit_debug_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
 /// For empty named-field groups (struct or empty struct variant) we
 /// special-case the body to print `Name {}` (with braces), matching the Debug
 /// derive and the spec. Enums dispatch through a `match self` over variants.
+/// Redact and skip write their literals directly; truncate reuses the marker
+/// enum (declared only when a truncate field exists) so both derives share
+/// one truncation algorithm.
 pub fn emit_display_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
     let name = &input.ident;
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
     let field_types = collect_field_types(plan);
     let synthesized_wc = synthesize_where(&input.generics, name, &field_types, Derive::DisplayDerive);
-    let name_str = name.to_string();
+    let name_str = name.unraw().to_string();
 
     let any_truncate = field_types.iter().any(|(_, p)| matches!(p, FieldPlan::Truncate(_)));
-    let alloc_import = if any_truncate {
-        quote! { extern crate alloc as __sensitive_fmt_alloc; }
-    } else {
-        quote! {}
-    };
+    let marker_decl = build_marker_decl(any_truncate, any_truncate);
 
     let body = match plan {
-        Plan::Struct(fields) => emit_display_named_body(&name_str, fields, |ident| quote! { &self.#ident }),
+        Plan::Struct(fields) => emit_display_named_body(&name_str, fields, |_, ident| quote! { &self.#ident }),
         Plan::Enum(variants) => {
             if variants.is_empty() {
                 quote! { match *self {} }
@@ -509,7 +537,7 @@ pub fn emit_display_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
         #[automatically_derived]
         impl #impl_generics ::core::fmt::Display for #name #ty_generics #synthesized_wc {
             fn fmt(&self, __f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                #alloc_import
+                #marker_decl
                 #body
             }
         }

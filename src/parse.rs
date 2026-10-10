@@ -50,6 +50,7 @@ pub enum Plan {
 /// enum variants. Empty enums (`enum Foo {}`) are accepted: codegen emits an
 /// uninhabited `match self {}` body.
 pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
+    reject_sensitive_attr(&input.attrs)?;
     match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(n),
@@ -68,6 +69,7 @@ pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
         Data::Enum(e) => {
             let mut variants = Vec::with_capacity(e.variants.len());
             for variant in &e.variants {
+                reject_sensitive_attr(&variant.attrs)?;
                 let shape = match &variant.fields {
                     Fields::Named(n) => VariantShape::Struct(plan_named_fields(n)?),
                     Fields::Unit => VariantShape::Unit,
@@ -92,6 +94,20 @@ pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
             &input.ident,
             format!("{derive_name} does not support unions"),
         )),
+    }
+}
+
+/// Derive helper attributes are accepted by rustc anywhere inside the item,
+/// including on the item itself and on enum variants. Only fields carry
+/// meaning here, so a misplaced attribute must be an error rather than a
+/// silent no-op that leaves the payload printed in full.
+fn reject_sensitive_attr(attrs: &[Attribute]) -> syn::Result<()> {
+    match attrs.iter().find(|attr| attr.path().is_ident("sensitive")) {
+        Some(attr) => Err(syn::Error::new_spanned(
+            attr,
+            "#[sensitive(...)] is only valid on fields",
+        )),
+        None => Ok(()),
     }
 }
 
