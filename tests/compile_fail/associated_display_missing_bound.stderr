@@ -11,7 +11,7 @@ help: the trait `std::fmt::Display` is not implemented for `NotDisplay`
    |
  7 | struct NotDisplay;
    | ^^^^^^^^^^^^^^^^^
-   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+   = note: in format strings you may be able to use `{:?}` (or `{:#?}` for pretty-print) instead
 help: the trait `std::fmt::Display` is conditionally implemented for `Wrapper<T>`
   --> tests/compile_fail/associated_display_missing_bound.rs:15:10
    |
@@ -24,5 +24,6 @@ note: required for `Wrapper<Demo>` to implement `std::fmt::Display`
    |          ---------------- type parameter would need to implement `std::fmt::Display`
 16 | struct Wrapper<T>
    |        ^^^^^^^^^^
-   = help: consider manually implementing `std::fmt::Display` to avoid undesired bounds
+   = help: consider manually implementing `std::fmt::Display` to avoid undesired bounds caused by "imperfect derives"
+   = note: to learn more, visit <https://github.com/rust-lang/rust/issues/26925>
    = note: this error originates in the macro `$crate::__export::format_args` which comes from the expansion of the derive macro `SensitiveDisplay` (in Nightly builds, run with -Z macro-backtrace for more info)

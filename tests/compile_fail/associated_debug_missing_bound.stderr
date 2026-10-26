@@ -19,7 +19,8 @@ note: required for `Wrapper<Demo>` to implement `Debug`
    |          -------------- type parameter would need to implement `Debug`
 16 | struct Wrapper<T>
    |        ^^^^^^^^^^
-   = help: consider manually implementing `Debug` to avoid undesired bounds
+   = help: consider manually implementing `Debug` to avoid undesired bounds caused by "imperfect derives"
+   = note: to learn more, visit <https://github.com/rust-lang/rust/issues/26925>
    = note: this error originates in the macro `$crate::__export::format_args` which comes from the expansion of the derive macro `SensitiveDebug` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider annotating `NotDebug` with `#[derive(Debug)]`
    |
