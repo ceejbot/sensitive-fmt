@@ -9,15 +9,14 @@ use syn::{DeriveInput, Generics, Type, WhereClause};
 
 use crate::parse::{FieldPlan, Plan, PlannedField, PlannedVariant, VariantShape};
 
-/// Which derive we're generating bounds for. Determines how Plain fields
-/// contribute (Debug for SensitiveDebug, Display for SensitiveDisplay).
+/// Which derive is being generated. A `Plain` field needs `Debug` under one
+/// and `Display` under the other; marked fields don't care.
 #[derive(Clone, Copy)]
 enum Derive {
     DebugDerive,
     DisplayDerive,
 }
 
-/// Which trait bound a single field type needs.
 #[derive(Clone, Copy)]
 enum NeededBound {
     None,
@@ -33,12 +32,16 @@ fn bound_for_field(plan: &FieldPlan, derive: Derive) -> NeededBound {
         (FieldPlan::Plain, DisplayDerive) => Display,
         (FieldPlan::Redact, _) => None,
         (FieldPlan::Skip, _) => None,
-        // Truncate always uses Display in both derives (formats with Display
-        // then slices the resulting string).
+        // Truncate formats with `Display` before slicing, under both derives.
         (FieldPlan::Truncate(_), _) => Display,
     }
 }
 
+/// Records which of `type_params` the type `ty` mentions. Hand-rolled rather
+/// than `syn::visit` so the crate doesn't enable syn's `visit` feature for one
+/// walk. Type arguments under a segment named after the self type are skipped:
+/// a `Vec<Wrapper<T>>` field is formatted by the impl being generated, so its
+/// `T` needs no bound of its own.
 fn collect_type_params(ty: &Type, type_params: &BTreeSet<String>, self_type: &Ident, found: &mut BTreeSet<String>) {
     match ty {
         Type::Path(tp) => {
@@ -155,7 +158,16 @@ fn path_arguments_contain_self(arguments: &syn::PathArguments, self_type: &Ident
     }
 }
 
-/// Build the `where` clause for an impl, adding the minimum bounds needed.
+/// Appends one predicate per formatted field to the user's `where` clause.
+///
+/// The bound goes on the field type itself (`Option<T>: Debug`), not on the
+/// type parameters it mentions, the same strategy serde uses. Bounding the
+/// field type is exact where a per-parameter `T: Debug` over-bounds:
+/// `PhantomData<T>`, associated-type projections, and wrapper types with
+/// their own conditional impls. Fields that mention no type parameter need no
+/// predicate. Fields that mention the type being defined (`Box<Self>`,
+/// `(T, Box<Self>)`) fall back to per-parameter bounds, since
+/// `Wrapper<T>: Debug` on the impl for `Wrapper<T>` is self-referential.
 fn synthesize_where(
     generics: &Generics,
     self_type: &Ident,
@@ -199,9 +211,9 @@ fn synthesize_where(
     wc
 }
 
-/// Flatten the plan into a single list of (type, plan) pairs across all fields,
-/// regardless of whether they live in a struct or in enum variants. Bound
-/// synthesis treats the input uniformly: duplicate predicates are harmless.
+/// Every field's (type, plan) pair, whether it lives in a struct or in an enum
+/// variant. Bound synthesis doesn't care which, and duplicate predicates are
+/// harmless.
 fn collect_field_types(plan: &Plan) -> Vec<(&Type, &FieldPlan)> {
     match plan {
         Plan::Struct(fields) => fields.iter().map(|f| (&f.ty, &f.plan)).collect(),
@@ -216,8 +228,14 @@ fn collect_field_types(plan: &Plan) -> Vec<(&Type, &FieldPlan)> {
     }
 }
 
-/// Build the `__SensitiveFmtMarkers` declaration block. Returns an empty
-/// TokenStream when no field uses redact/skip/truncate.
+/// Declares the local marker enum at the top of the generated `fmt` body.
+///
+/// `.field("name", &"REDACTED")` would print the quotes; the enum's `Debug`
+/// impl writes the bare text instead. It is local to `fmt` so nothing leaks
+/// into the user's namespace, and declared before any `match self` so every
+/// arm can reach it. The `alloc` import and the `Truncated` variant appear
+/// only when a field truncates, which keeps redact/skip-only types on `core`
+/// alone.
 fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
     if !any_marked {
         return quote! {};
@@ -254,8 +272,6 @@ fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
     };
     quote! {
         #alloc_import
-        // Local marker enum with a Debug impl that writes bare strings or
-        // truncated tails. Scoped to this fmt body so it doesn't leak.
         // Which variants get constructed depends on the user's attributes.
         #[allow(dead_code)]
         enum __SensitiveFmtMarkers {
@@ -275,8 +291,8 @@ fn build_marker_decl(any_marked: bool, any_truncate: bool) -> TokenStream {
     }
 }
 
-/// One `__builder.field(...)` call for a single field, parameterized by the
-/// access expression (`&self.foo` for structs, `foo` for enum match arms).
+/// One `__builder.field(...)` call. `access` is `&self.foo` for a struct and
+/// the match-arm binding for an enum variant, which is already a reference.
 fn debug_field_call(field: &PlannedField, access: &TokenStream) -> TokenStream {
     let label = field.ident.unraw().to_string();
     match &field.plan {
@@ -304,10 +320,10 @@ fn debug_field_call(field: &PlannedField, access: &TokenStream) -> TokenStream {
     }
 }
 
-/// One field's worth of Display writes (label + value), parameterized by the
-/// access expression. Caller emits separators and the surrounding braces.
-/// Truncation goes through the same marker enum the Debug derive uses, so
-/// there is exactly one copy of the algorithm in the generated code.
+/// One field's label and value for the Display body; the caller emits the
+/// separators and braces. Truncation goes through the same marker enum the
+/// Debug derive uses, so the generated code carries one copy of the
+/// algorithm.
 fn display_field_writes(field: &PlannedField, access: &TokenStream) -> TokenStream {
     let label = format!("{}: ", field.ident.unraw());
     let value = match &field.plan {
@@ -339,9 +355,10 @@ fn display_field_writes(field: &PlannedField, access: &TokenStream) -> TokenStre
     }
 }
 
-/// Body for one named-field group: either "Name {}" (empty) or a
-/// `f.debug_struct(name).field(...).finish()` chain. `name_str` is the name
-/// shown in output ("Patient" for a struct, "Cat" for an enum variant).
+/// Body for one named-field group. `name_str` is what the output shows:
+/// "Patient" for a struct, "Cat" for an enum variant. The empty case is
+/// special-cased because `debug_struct(name).finish()` prints `Name` without
+/// braces and the spec wants `Name {}`.
 fn emit_debug_named_body(
     name_str: &str,
     fields: &[PlannedField],
@@ -362,8 +379,8 @@ fn emit_debug_named_body(
     }
 }
 
-/// Body for one named-field group, Display flavor. Same shape rules as
-/// `emit_debug_named_body`, just using `write_str` directly.
+/// Display flavor of `emit_debug_named_body`, written with `write_str`
+/// directly.
 fn emit_display_named_body(
     name_str: &str,
     fields: &[PlannedField],
@@ -405,7 +422,6 @@ fn variant_pattern(v_ident: &Ident, fields: &[PlannedField]) -> TokenStream {
     quote! { Self::#v_ident { #(#bindings),* } }
 }
 
-/// Single arm for an enum variant in a Debug match.
 fn emit_debug_variant_arm(variant: &PlannedVariant) -> TokenStream {
     let v_ident = &variant.ident;
     let v_str = v_ident.unraw().to_string();
@@ -432,7 +448,6 @@ fn emit_debug_variant_arm(variant: &PlannedVariant) -> TokenStream {
     }
 }
 
-/// Single arm for an enum variant in a Display match.
 fn emit_display_variant_arm(variant: &PlannedVariant) -> TokenStream {
     let v_ident = &variant.ident;
     let v_str = v_ident.unraw().to_string();
@@ -459,16 +474,8 @@ fn emit_display_variant_arm(variant: &PlannedVariant) -> TokenStream {
     }
 }
 
-/// Emit `impl Debug for #name` honoring each field's `FieldPlan`.
-///
-/// For empty named-field groups (struct or empty struct variant) we
-/// special-case the body to print `Name {}` (with braces), matching the spec.
-/// Otherwise the body uses `f.debug_struct(...)` so pretty-printing via
-/// `{:#?}` works for free. Marked fields use a local marker enum whose Debug
-/// impl writes the bare marker string (e.g. `REDACTED`) without the quotes
-/// that `&"REDACTED"` would produce. Enums dispatch through a `match self`
-/// over variants; the marker enum is declared once at the top of `fmt` and
-/// shared across all arms.
+/// Emit `impl Debug for #name`. Non-empty bodies go through
+/// `f.debug_struct(...)`, so `{:#?}` pretty-printing works for free.
 pub fn emit_debug_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
     let name = &input.ident;
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
@@ -484,6 +491,8 @@ pub fn emit_debug_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
         Plan::Struct(fields) => emit_debug_named_body(&name_str, fields, |_, ident| quote! { &self.#ident }),
         Plan::Enum(variants) => {
             if variants.is_empty() {
+                // `*self`, not `self`: a reference to an uninhabited type is
+                // itself inhabited, so `match self {}` is non-exhaustive.
                 quote! { match *self {} }
             } else {
                 let arms = variants.iter().map(emit_debug_variant_arm);
@@ -503,14 +512,9 @@ pub fn emit_debug_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
     }
 }
 
-/// Emit `impl Display for #name` honoring each field's `FieldPlan`.
-///
-/// For empty named-field groups (struct or empty struct variant) we
-/// special-case the body to print `Name {}` (with braces), matching the Debug
-/// derive and the spec. Enums dispatch through a `match self` over variants.
-/// Redact and skip write their literals directly; truncate reuses the marker
-/// enum (declared only when a truncate field exists) so both derives share
-/// one truncation algorithm.
+/// Emit `impl Display for #name`. Redact and skip write their literals
+/// directly; only truncate needs the marker enum, so it is declared only when
+/// a field truncates.
 pub fn emit_display_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
     let name = &input.ident;
     let (impl_generics, ty_generics, _inherited_wc) = input.generics.split_for_impl();
@@ -525,6 +529,7 @@ pub fn emit_display_impl(input: &DeriveInput, plan: &Plan) -> TokenStream {
         Plan::Struct(fields) => emit_display_named_body(&name_str, fields, |_, ident| quote! { &self.#ident }),
         Plan::Enum(variants) => {
             if variants.is_empty() {
+                // `*self`, not `self`: see the Debug derive.
                 quote! { match *self {} }
             } else {
                 let arms = variants.iter().map(emit_display_variant_arm);

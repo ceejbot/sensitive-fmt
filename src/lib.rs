@@ -37,13 +37,13 @@
 //! | `#[sensitive(truncate = N)]` | `****` + last N code points, or `REDACTED` if shorter than N    | `Display` in both derives          |
 //! | `#[sensitive(skip)]`         | `<skipped>`                                                     | none                               |
 //!
-//! Enums with unit and named-field variants are supported; output is prefixed
-//! with the variant name, as std's `#[derive(Debug)]` does. Tuple structs,
-//! tuple variants, and unions are rejected at compile time.
+//! Enums with unit and named-field variants work too; output starts with the
+//! variant name, as std's `#[derive(Debug)]` does. Tuple structs, tuple
+//! variants, and unions fail at compile time.
 //!
 //! `truncate` accepts any field type that implements `Display`, not only
-//! strings. The value is formatted with `Display` first and the last N code
-//! points of that text are kept, so `truncate = 4` on a `u64` holding
+//! strings. It formats the value with `Display` first and keeps the last N
+//! code points of that text, so `truncate = 4` on a `u64` holding
 //! `1234567890` prints `****7890`, and `42` prints `REDACTED`.
 //!
 //! The crate is `no_std` compatible. Only `truncate` requires `alloc`.
@@ -59,11 +59,10 @@ mod parse;
 /// Derive `core::fmt::Debug`, honoring `#[sensitive(redact | truncate = N |
 /// skip)]` on fields.
 ///
-/// Unmarked fields are formatted with `Debug` and need a `Debug` impl. Marked
+/// Unmarked fields format with `Debug` and need a `Debug` impl. Marked
 /// fields never touch the value except `truncate`, which formats it with
-/// `Display` and keeps the last N code points. That applies to any `Display`
-/// type, so a numeric field keeps its last N digits. `{:#?}` pretty-printing
-/// works.
+/// `Display` and keeps the last N code points; a numeric field keeps its
+/// last N digits. `{:#?}` pretty-printing works.
 ///
 /// ```
 /// use sensitive_fmt::SensitiveDebug;
@@ -91,8 +90,8 @@ pub fn derive_sensitive_debug(input: TokenStream) -> TokenStream {
 /// skip)]` on fields.
 ///
 /// Output has the same `Name { field: value, .. }` shape as the `Debug`
-/// derive, but unmarked fields are formatted with `Display` (so strings have
-/// no quotes) and need a `Display` impl. Marked fields render identically in
+/// derive, but unmarked fields format with `Display` (so strings have no
+/// quotes) and need a `Display` impl. Marked fields render identically in
 /// both derives.
 ///
 /// ```

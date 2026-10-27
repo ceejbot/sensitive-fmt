@@ -5,7 +5,7 @@
 Derive `Debug` and `Display` for Rust structs and enums while honoring sensitive field annotations. Designed for one
 job: keeping PHI, PII, secrets, and tokens out of log lines.
 
-I wrote this because none of the crates I could find (including my own [safe-debug](https://github.com/ceejbot/safe-debug) ) did exactly what I wanted as simply as I wanted to do it. This sensitive data redactor:
+I wrote this because none of the crates I could find, including my own [safe-debug](https://github.com/ceejbot/safe-debug), did exactly what I wanted as simply as I wanted it done. This one:
 
 - derives both `Debug` and `Display`
 - leans on existing implementations of both for non-primitive types, or lets you skip the field
@@ -50,14 +50,14 @@ assert_eq!(
 
 One attribute, three modifiers (mutually exclusive):
 
-| Attribute                    | Effect                                                                                 | required trait                                                 |
+| Attribute                    | Effect                                                                                 | Required trait                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | _(none)_                     | normal `Debug` / `Display`                                                             | `Debug` for `SensitiveDebug`, `Display` for `SensitiveDisplay` |
 | `#[sensitive(redact)]`       | writes `REDACTED`                                                                      | none                                                           |
-| `#[sensitive(truncate = N)]` | writes `****<last N code points>`, or `REDACTED` if value has fewer than N code points | `Display` (in both derives)                                    |
+| `#[sensitive(truncate = N)]` | writes `****<last N code points>`, or `REDACTED` if the value has fewer than N         | `Display` (in both derives)                                    |
 | `#[sensitive(skip)]`         | writes `<skipped>`                                                                     | none                                                           |
 
-Enums with unit and named-field variants work the same way. Output is prefixed with the variant name, as std's
+Enums with unit and named-field variants work the same way. Output starts with the variant name, as std's
 `#[derive(Debug)]` does:
 
 ```rust
@@ -84,17 +84,17 @@ assert_eq!(format!("{}", Event::Heartbeat), "Heartbeat");
   silent no-op.
 - Tuple structs and tuple variants fail at compile time with a clear message. Wrap the data in a named-field struct
   or variant instead.
-- Container types (`Option<T>`, `Vec<T>`, etc.) are treated as opaque. If you have an `Option<String>` field you can't
-  `Display`-format directly, reach for `redact` or `skip`.
-- Generic structs are supported by adding trait bounds on the actual formatted field type. Plain fields require
-  `Debug` for `SensitiveDebug` or `Display` for `SensitiveDisplay`; `truncate` always requires `Display`; `redact` and
-  `skip` do not add formatting bounds.
-- `no_std` compatible. Requires `alloc` for the `truncate` modifier.
+- The derives treat container types (`Option<T>`, `Vec<T>`, and so on) as opaque. An `Option<String>` field has no
+  `Display`, so reach for `redact` or `skip`.
+- Generic types work. The derive bounds the field type that is actually formatted, not the type parameter: plain
+  fields need `Debug` or `Display` to match the derive, `truncate` always needs `Display`, and `redact` and `skip` add
+  no bound at all.
+- `no_std` compatible. Only `truncate` needs `alloc`.
 - Minimum supported Rust version: 1.88.0.
 - Truncate counts code points, not graphemes. `"café"` is 4 code points.
-- Truncate works on any `Display` type, not just strings. The value is formatted with `Display` first and the tail
-  of that text is kept, so `#[sensitive(truncate = 4)]` on a `u64` holding `1234567890` prints `****7890`, and a
-  value that formats to fewer than four characters prints `REDACTED`.
+- Truncate works on any `Display` type, not just strings. It formats the value first and keeps the tail of that
+  text, so `#[sensitive(truncate = 4)]` on a `u64` holding `1234567890` prints `****7890`, and a value that formats
+  to fewer than four characters prints `REDACTED`.
 
 ## Why not [other crate]?
 

@@ -1,54 +1,51 @@
-//! Attribute and field parsing for `sensitive-fmt`.
+//! Turns a `DeriveInput` into the `Plan` that codegen consumes. Every
+//! rejection is a `syn::Error` spanned to the offending token, so the user
+//! sees it on the attribute or ident that caused it.
 
 use proc_macro2::Ident;
 use syn::{Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Meta};
 
-/// What to emit for a single field.
+/// What to emit for a single field, distilled from its `#[sensitive(...)]`
+/// attribute.
 pub enum FieldPlan {
-    /// No `#[sensitive(...)]` attribute on this field. Emit normal
-    /// Debug/Display.
+    /// No attribute: format with the derive's own trait.
     Plain,
-    /// `#[sensitive(redact)]` — emit the literal `REDACTED`.
     Redact,
-    /// `#[sensitive(skip)]` — emit the literal `<skipped>`.
     Skip,
-    /// `#[sensitive(truncate = N)]` where N >= 1.
+    /// The parser guarantees N >= 1.
     Truncate(u32),
 }
 
-/// One field of the user's struct, distilled to (name, type, plan).
+/// One named field with its attribute already parsed. The type rides along
+/// for bound synthesis.
 pub struct PlannedField {
     pub ident: Ident,
     pub ty: syn::Type,
     pub plan: FieldPlan,
 }
 
-/// One variant of an enum input, distilled to its name and shape.
 pub struct PlannedVariant {
     pub ident: Ident,
     pub shape: VariantShape,
 }
 
-/// Shape of a single enum variant. Tuple variants are rejected at parse time.
+/// Tuple variants never reach here; `plan_input` rejects them.
 pub enum VariantShape {
-    /// `Variant` — no payload.
     Unit,
-    /// `Variant { ... }` — named fields, possibly empty.
+    /// Possibly empty: `Variant {}` prints with braces, and codegen
+    /// special-cases it.
     Struct(Vec<PlannedField>),
 }
 
-/// Top-level distilled view of the user's input — either a named-field struct
-/// or an enum whose variants are all unit or named-field shaped.
+/// Every input shape codegen handles. Anything else fails in `plan_input`.
 pub enum Plan {
     Struct(Vec<PlannedField>),
     Enum(Vec<PlannedVariant>),
 }
 
-/// Parse a `DeriveInput` into a `Plan`.
-///
-/// Returns a `syn::Error` for tuple structs, unit structs, unions, and tuple
-/// enum variants. Empty enums (`enum Foo {}`) are accepted: codegen emits an
-/// uninhabited `match self {}` body.
+/// Rejects tuple structs, unit structs, unions, tuple variants, and any
+/// `#[sensitive(...)]` that is not on a field. Empty enums pass: codegen emits
+/// an uninhabited `match *self {}` body.
 pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
     reject_sensitive_attr(&input.attrs)?;
     match &input.data {
@@ -97,10 +94,10 @@ pub fn plan_input(input: &DeriveInput, derive_name: &str) -> syn::Result<Plan> {
     }
 }
 
-/// Derive helper attributes are accepted by rustc anywhere inside the item,
-/// including on the item itself and on enum variants. Only fields carry
-/// meaning here, so a misplaced attribute must be an error rather than a
-/// silent no-op that leaves the payload printed in full.
+/// rustc accepts derive helper attributes anywhere inside the item, including
+/// on the item itself and on enum variants. Only fields carry meaning here, so
+/// a misplaced attribute must fail loudly rather than print the payload in
+/// full.
 fn reject_sensitive_attr(attrs: &[Attribute]) -> syn::Result<()> {
     match attrs.iter().find(|attr| attr.path().is_ident("sensitive")) {
         Some(attr) => Err(syn::Error::new_spanned(
@@ -144,9 +141,8 @@ fn parse_field_plan(field: &Field) -> syn::Result<FieldPlan> {
 }
 
 fn parse_sensitive_attr(attr: &Attribute) -> syn::Result<FieldPlan> {
-    // Parse contents as a comma-separated Punctuated<Meta, Comma>, then
-    // assert exactly one element so we can give a precise error for both
-    // empty `()` and multi-modifier `(a, b)` cases.
+    // A full `Punctuated` parse, rather than `parse_nested_meta`, so that empty
+    // `()` and multi-modifier `(a, b)` each get their own error.
     let metas: syn::punctuated::Punctuated<Meta, syn::Token![,]> =
         attr.parse_args_with(syn::punctuated::Punctuated::parse_terminated)?;
 
@@ -219,9 +215,9 @@ fn path_str(p: &syn::Path) -> String {
 fn parse_truncate_value(expr: &syn::Expr, nv: &syn::MetaNameValue) -> syn::Result<u32> {
     let lit = match expr {
         syn::Expr::Lit(syn::ExprLit { lit, .. }) => lit,
-        // `-3` becomes Expr::Unary{ op: Neg, expr: Lit(3) }, not Expr::Lit.
-        // Catch this so we give a "must be a positive integer" message
-        // instead of "must be an integer literal".
+        // `-3` parses as `Expr::Unary(Neg, Lit(3))`, not `Expr::Lit`. Catch it
+        // here so the error says "positive integer" rather than "integer
+        // literal".
         syn::Expr::Unary(syn::ExprUnary {
             op: syn::UnOp::Neg(_), ..
         }) => {
