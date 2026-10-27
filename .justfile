@@ -46,6 +46,16 @@ version BUMP:
     set -e
     current=$(tomato get package.version Cargo.toml)
     version=$(semver-bump {{ BUMP }} "$current")
+    # The recipe cannot infer the one release fact the tarball ships verbatim:
+    # CHANGELOG.md must already name this version with a date. Twice a release
+    # went out under "## Unreleased" because nothing checked.
+    if ! grep -Eq "^## ${version//./\\.} — [0-9]{4}-[0-9]{2}-[0-9]{2}" CHANGELOG.md; then
+        printf "{{ BOLD }}{{ RED }}refusing to tag v${version}{{ RESET }}: CHANGELOG.md has no '## ${version} — YYYY-MM-DD' heading.\n" >&2
+        if grep -q "^## Unreleased" CHANGELOG.md; then
+            printf "Rename the '## Unreleased' heading to '## ${version} — $(date +%F)' and commit it first.\n" >&2
+        fi
+        exit 1
+    fi
     tomato set package.version "$version" Cargo.toml &> /dev/null
     cargo generate-lockfile
     git commit Cargo.toml -m "v${version}"
