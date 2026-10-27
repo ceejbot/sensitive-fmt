@@ -41,6 +41,11 @@
 //! with the variant name, as std's `#[derive(Debug)]` does. Tuple structs,
 //! tuple variants, and unions are rejected at compile time.
 //!
+//! `truncate` accepts any field type that implements `Display`, not only
+//! strings. The value is formatted with `Display` first and the last N code
+//! points of that text are kept, so `truncate = 4` on a `u64` holding
+//! `1234567890` prints `****7890`, and `42` prints `REDACTED`.
+//!
 //! The crate is `no_std` compatible. Only `truncate` requires `alloc`.
 //!
 //! See the [README](https://github.com/ceejbot/sensitive-fmt) for the
@@ -56,7 +61,9 @@ mod parse;
 ///
 /// Unmarked fields are formatted with `Debug` and need a `Debug` impl. Marked
 /// fields never touch the value except `truncate`, which formats it with
-/// `Display` and keeps the last N code points. `{:#?}` pretty-printing works.
+/// `Display` and keeps the last N code points. That applies to any `Display`
+/// type, so a numeric field keeps its last N digits. `{:#?}` pretty-printing
+/// works.
 ///
 /// ```
 /// use sensitive_fmt::SensitiveDebug;

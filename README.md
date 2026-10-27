@@ -92,6 +92,9 @@ assert_eq!(format!("{}", Event::Heartbeat), "Heartbeat");
 - `no_std` compatible. Requires `alloc` for the `truncate` modifier.
 - Minimum supported Rust version: 1.88.0.
 - Truncate counts code points, not graphemes. `"café"` is 4 code points.
+- Truncate works on any `Display` type, not just strings. The value is formatted with `Display` first and the tail
+  of that text is kept, so `#[sensitive(truncate = 4)]` on a `u64` holding `1234567890` prints `****7890`, and a
+  value that formats to fewer than four characters prints `REDACTED`.
 
 ## Why not [other crate]?
 

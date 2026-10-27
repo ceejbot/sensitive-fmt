@@ -16,6 +16,12 @@ struct Mixed {
     code_point_value: String,
 }
 
+#[derive(SensitiveDebug, SensitiveDisplay)]
+struct Account {
+    #[sensitive(truncate = 4)]
+    number: u64,
+}
+
 #[test]
 fn truncate_long_value_keeps_last_n() {
     let t = Token {
@@ -66,4 +72,21 @@ fn truncate_counts_code_points_not_bytes() {
     };
     assert_eq!(format!("{m:?}"), "Mixed { id: 1, code_point_value: ****fé🔑x }");
     assert_eq!(format!("{m}"), "Mixed { id: 1, code_point_value: ****fé🔑x }");
+}
+
+#[test]
+fn truncate_non_string_field_keeps_tail_of_display_output() {
+    // Truncation formats the value with `Display` first, so a numeric field
+    // keeps its last N digits.
+    let a = Account { number: 1234567890 };
+    assert_eq!(format!("{a:?}"), "Account { number: ****7890 }");
+    assert_eq!(format!("{a}"), "Account { number: ****7890 }");
+}
+
+#[test]
+fn truncate_short_non_string_field_fully_redacts() {
+    // 42 formats as two code points, fewer than N = 4.
+    let a = Account { number: 42 };
+    assert_eq!(format!("{a:?}"), "Account { number: REDACTED }");
+    assert_eq!(format!("{a}"), "Account { number: REDACTED }");
 }
